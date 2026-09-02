@@ -1,0 +1,19 @@
+# Dependency directories
+node_modules/
+backend/node_modules/
+placement-frontend/node_modules/
+
+# Environment files
+.env
+.env.*
+.env.local
+.env.production
+backend/.env*
+placement-frontend/.env*
+
+# Build outputs
+placement-frontend/dist/
+
+# Logs & OS files
+*.log
+.DS_Store
