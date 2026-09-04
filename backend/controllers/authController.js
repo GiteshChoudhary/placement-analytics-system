@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const Student = require('../models/Student');
 const Company = require('../models/Company');
 const { sendRecruiterInviteEmail } = require('../utils/emailService');
+const { cleanBaseUrl, buildRecruiterInviteLink } = require('../utils/urlHelper');
 
 // Helper function to generate JWT token
 const generateToken = (id, email, role) => {
@@ -205,33 +206,34 @@ const inviteHR = async (req, res) => {
     );
 
     // Dynamically resolve portal base URL (prefer Vercel/production env var)
-    let resolvedUrl =
+    let candidateBaseUrl =
       process.env.FRONTEND_URL ||
       frontendUrl ||
       portalUrl ||
       clientUrl ||
       process.env.CLIENT_URL;
 
-    if (!resolvedUrl || resolvedUrl.includes('localhost')) {
+    if (!candidateBaseUrl || candidateBaseUrl.includes('localhost')) {
       if (frontendUrl && !frontendUrl.includes('localhost')) {
-        resolvedUrl = frontendUrl;
+        candidateBaseUrl = frontendUrl;
       } else if (req.headers.origin && !req.headers.origin.includes('localhost')) {
-        resolvedUrl = req.headers.origin;
+        candidateBaseUrl = req.headers.origin;
       } else if (req.headers.referer && !req.headers.referer.includes('localhost')) {
         try {
-          resolvedUrl = new URL(req.headers.referer).origin;
+          candidateBaseUrl = new URL(req.headers.referer).origin;
         } catch (e) {}
       }
     }
 
-    if (!resolvedUrl) {
-      resolvedUrl = frontendUrl || 'http://localhost:5173';
+    if (!candidateBaseUrl) {
+      candidateBaseUrl = frontendUrl || 'http://localhost:5173';
     }
 
-    resolvedUrl = resolvedUrl.replace(/\/+$/, '');
-    const inviteLink = `${resolvedUrl}/recruiter-setup?token=${inviteToken}`;
+    // Build unbroken, fully standardized recruiter invite link
+    const inviteLink = buildRecruiterInviteLink(candidateBaseUrl, inviteToken);
+    console.log('[inviteHR] Generated clean inviteLink:', inviteLink);
 
-    // Send invitation email via Nodemailer
+    // Send invitation email via Resend
     await sendRecruiterInviteEmail({
       recipientEmail: email.toLowerCase().trim(),
       companyName: resolvedCompanyName,

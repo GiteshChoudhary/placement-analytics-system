@@ -5,6 +5,8 @@ try {
   // Fallback to fetch if resend package is not present
 }
 
+const { cleanBaseUrl, buildRecruiterInviteLink } = require('./urlHelper');
+
 /**
  * Core email dispatcher using Resend API (HTTPS / Port 443).
  * Replaces Nodemailer SMTP to prevent Render firewall connection timeouts (ports 25, 465, 587).
@@ -104,44 +106,74 @@ const sendRecruiterInviteEmail = async ({
     throw new Error('Recipient email address is required to send recruiter invitation.');
   }
 
-  // Resolve direct setup link
-  const clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
-  const setupToken = token || (inviteLink ? inviteLink.split('token=')[1] : '');
-  const directLink = inviteLink || `${clientUrl.replace(/\/+$/, '')}/recruiter-setup?token=${setupToken}`;
+  // Ensure direct setup link is completely clean, valid, and unbroken
+  let directLink = '';
+  if (inviteLink && typeof inviteLink === 'string' && inviteLink.trim() !== '') {
+    // Strip accidental quotes, spaces, tabs, or newlines
+    let clean = inviteLink.replace(/[\r\n\t\s"']/g, '').trim();
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      clean = `https://${clean}`;
+    }
+    directLink = clean;
+  } else {
+    directLink = buildRecruiterInviteLink(
+      process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:5173',
+      token
+    );
+  }
+
+  console.log(`[Email Service] Preparing recruiter invitation for ${recipient} with link: ${directLink}`);
 
   const htmlContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff;">
+    <div style="font-family: Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
       <div style="text-align: center; margin-bottom: 20px;">
-        <h1 style="color: #1e3a8a; margin: 0; font-size: 24px;">🎓 Campus Placement Cell</h1>
+        <h1 style="color: #1e3a8a; margin: 0; font-size: 24px; font-weight: 700;">🎓 Campus Placement Cell</h1>
         <p style="color: #64748b; margin: 5px 0 0 0; font-size: 14px;">Training & Placement Office (TPO)</p>
       </div>
       <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-      <h2 style="color: #0f172a; font-size: 18px;">Invitation to Onboard: Campus Placement Drive</h2>
-      <p style="color: #334155; line-height: 1.6;">
+      <h2 style="color: #0f172a; font-size: 18px; margin-bottom: 12px;">Invitation to Onboard: Campus Placement Drive</h2>
+      <p style="color: #334155; line-height: 1.6; font-size: 15px;">
         Dear Recruitment Team${companyName ? ` at <strong>${companyName}</strong>` : ''},
       </p>
-      <p style="color: #334155; line-height: 1.6;">
+      <p style="color: #334155; line-height: 1.6; font-size: 15px;">
         The College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications.
       </p>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${directLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 15px; display: inline-block;">
-          Complete Recruiter Setup →
+
+      <!-- Primary CTA Button (Bulletproof mobile-friendly table button) -->
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 32px auto; width: auto;">
+        <tr>
+          <td align="center" style="border-radius: 6px; background-color: #2563eb;">
+            <a href="${directLink}" target="_blank" rel="noopener noreferrer" style="background-color: #2563eb; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 15px; display: inline-block; border: 1px solid #2563eb; -webkit-text-size-adjust: none;">
+              Complete Recruiter Setup →
+            </a>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Text fallback link: explicitly structured to avoid mobile link breakage -->
+      <p style="color: #64748b; font-size: 13px; margin-top: 25px; margin-bottom: 6px; line-height: 1.5;">
+        If the button above does not open, tap the direct portal link below:
+      </p>
+      <p style="margin: 0 0 10px 0; font-size: 14px; line-height: 1.5;">
+        <a href="${directLink}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline;">
+          👉 Open Recruiter Setup Portal
+        </a>
+      </p>
+      <div style="margin: 0; color: #94a3b8; font-size: 11px; font-family: Consolas, 'Courier New', monospace; word-break: break-all; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; line-height: 1.4;">
+        <a href="${directLink}" target="_blank" rel="noopener noreferrer" style="color: #475569; text-decoration: none; word-break: break-all;">
+          ${directLink}
         </a>
       </div>
-      <p style="color: #64748b; font-size: 13px; margin-top: 25px;">
-        If the button above does not open, copy and paste this link into your browser:
-      </p>
-      <p style="word-break: break-all; font-size: 12px; color: #2563eb;">
-        <a href="${directLink}" style="color: #2563eb;">${directLink}</a>
-      </p>
-      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 25px 0;" />
-      <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 25px 0 15px 0;" />
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; text-align: center;">
         ⚠️ This invitation link is unique to ${recipient} and will expire in <strong>48 hours</strong>.
       </p>
     </div>
   `;
 
-  const plainText = `Dear Recruitment Team at ${companyName},\n\nThe College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications:\n\n${directLink}\n\nThis invitation link expires in 48 hours.`;
+  // Plain-text alternative: Enclose in angle brackets <...> per RFC 3986 so email clients don't fold/split URLs across lines
+  const plainText = `Dear Recruitment Team at ${companyName},\n\nThe College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications:\n\nComplete Recruiter Setup Link:\n<${directLink}>\n\n(This invitation link is unique to ${recipient} and will expire in 48 hours.)`;
 
   try {
     const result = await sendEmailViaResend({
@@ -176,8 +208,10 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
     return { success: false, message: 'studentEmail is required' };
   }
 
-  const clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
-  const dashboardLink = `${clientUrl.replace(/\/+$/, '')}/student-dashboard`;
+  const cleanPortalUrl = cleanBaseUrl(
+    process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:5173'
+  );
+  const dashboardLink = `${cleanPortalUrl}/student-dashboard`;
 
   const stageNormalized = (newStage || '').toLowerCase().trim();
   const stageCapitalized = stageNormalized
@@ -211,7 +245,7 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
       </p>
     `;
 
-    plainText = `Hi ${studentName},\n\nCongratulations! You have received an official offer from ${companyName}. Log in to your dashboard to see full details and next steps: ${dashboardLink}`;
+    plainText = `Hi ${studentName},\n\nCongratulations! You have received an official offer from ${companyName}. Log in to your dashboard to see full details and next steps:\n<${dashboardLink}>`;
   } else if (stageNormalized === 'rejected') {
     subject = `Update on your application to ${companyName}`;
     badgeText = 'Application Status Update';
@@ -234,7 +268,7 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
       </p>
     `;
 
-    plainText = `Hi ${studentName},\n\nThank you for participating in the recruitment process with ${companyName}. While your application will not be advancing to the next round for this role, we encourage you to keep striving and check your dashboard for new upcoming placement drives: ${dashboardLink}`;
+    plainText = `Hi ${studentName},\n\nThank you for participating in the recruitment process with ${companyName}. While your application will not be advancing to the next round for this role, we encourage you to keep striving and check your dashboard for new upcoming placement drives:\n<${dashboardLink}>`;
   } else {
     subject = `Update on your application to ${companyName}`;
     badgeText = `Round: ${stageCapitalized}`;
@@ -254,7 +288,7 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
       </p>
     `;
 
-    plainText = `Hi ${studentName},\n\nYour application to ${companyName} has moved to the ${stageCapitalized} round. Log in to your dashboard to see full details: ${dashboardLink}`;
+    plainText = `Hi ${studentName},\n\nYour application to ${companyName} has moved to the ${stageCapitalized} round. Log in to your dashboard to see full details:\n<${dashboardLink}>`;
   }
 
   const htmlContent = `
@@ -274,17 +308,29 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
 
       ${htmlBody}
 
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${dashboardLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">
-          ${buttonText}
-        </a>
-      </div>
+      <!-- Bulletproof CTA Button -->
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 30px auto; width: auto;">
+        <tr>
+          <td align="center" style="border-radius: 6px; background-color: #2563eb;">
+            <a href="${dashboardLink}" target="_blank" rel="noopener noreferrer" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block; border: 1px solid #2563eb;">
+              ${buttonText}
+            </a>
+          </td>
+        </tr>
+      </table>
 
-      <p style="color: #64748b; font-size: 12px; margin-top: 25px;">
-        If the button above does not work, copy and paste this URL into your browser:
+      <p style="color: #64748b; font-size: 12px; margin-top: 25px; margin-bottom: 6px;">
+        If the button above does not work, open the dashboard link below:
       </p>
-      <p style="word-break: break-all; font-size: 12px; color: #2563eb;">
-        <a href="${dashboardLink}" style="color: #2563eb;">${dashboardLink}</a>
+      <p style="margin: 0; font-size: 13px;">
+        <a href="${dashboardLink}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline;">
+          Open Placement Dashboard
+        </a>
+      </p>
+      <p style="margin: 6px 0 15px 0; color: #94a3b8; font-size: 11px; font-family: Consolas, monospace; word-break: break-all; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px 10px;">
+        <a href="${dashboardLink}" target="_blank" rel="noopener noreferrer" style="color: #475569; text-decoration: none;">
+          ${dashboardLink}
+        </a>
       </p>
 
       <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 25px 0 15px 0;" />

@@ -30,7 +30,15 @@ const allowedOrigins = [
   'http://localhost:5000',
   process.env.FRONTEND_URL,
   process.env.CLIENT_URL,
-].filter(Boolean).map((url) => url.replace(/\/+$/, ''));
+]
+  .filter(Boolean)
+  .map((url) =>
+    url
+      .replace(/^["'`]+|["'`]+$/g, '')
+      .replace(/[\r\n\t]/g, '')
+      .trim()
+      .replace(/\/+$/, '')
+  );
 
 const corsOriginValidator = (origin, callback) => {
   // Allow requests with no origin (e.g. mobile apps, curl, Postman, server-to-server)
