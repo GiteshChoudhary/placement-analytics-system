@@ -139,29 +139,24 @@ const sendRecruiterInviteEmail = async ({
         The College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications.
       </p>
 
-      <!-- Primary CTA Button (Bulletproof mobile-friendly table button) -->
-      <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 32px auto; width: auto;">
+      <!-- Primary Setup Button -->
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 32px auto; width: 100%; max-width: 320px;">
         <tr>
-          <td align="center" style="border-radius: 6px; background-color: #2563eb;">
-            <a href="${directLink}" target="_blank" rel="noopener noreferrer" style="background-color: #2563eb; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 15px; display: inline-block; border: 1px solid #2563eb; -webkit-text-size-adjust: none;">
+          <td align="center" style="border-radius: 8px; background-color: #2563eb;">
+            <a href="${directLink}" target="_blank" rel="noopener noreferrer" style="background-color: #2563eb; color: #ffffff; padding: 16px 28px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 16px; display: block; text-align: center; border: 1px solid #2563eb; -webkit-text-size-adjust: none;">
               Complete Recruiter Setup →
             </a>
           </td>
         </tr>
       </table>
 
-      <!-- Text fallback link: explicitly structured to avoid mobile link breakage -->
-      <p style="color: #64748b; font-size: 13px; margin-top: 25px; margin-bottom: 6px; line-height: 1.5;">
-        If the button above does not open, tap the direct portal link below:
-      </p>
-      <p style="margin: 0 0 10px 0; font-size: 14px; line-height: 1.5;">
-        <a href="${directLink}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline;">
-          👉 Open Recruiter Setup Portal
-        </a>
-      </p>
-      <div style="margin: 0; color: #94a3b8; font-size: 11px; font-family: Consolas, 'Courier New', monospace; word-break: break-all; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; line-height: 1.4;">
-        <a href="${directLink}" target="_blank" rel="noopener noreferrer" style="color: #475569; text-decoration: none; word-break: break-all;">
-          ${directLink}
+      <!-- Fallback Anchor Link (Prevents email clients from line-wrapping raw URL strings) -->
+      <div style="text-align: center; margin: 24px 0;">
+        <p style="color: #64748b; font-size: 13px; margin: 0 0 8px 0;">
+          If the button above does not open, click the link below:
+        </p>
+        <a href="${directLink}" target="_blank" rel="noopener noreferrer" style="word-break: break-all; white-space: normal; color: #2563eb; font-size: 15px; font-weight: 600; text-decoration: underline; display: inline-block;">
+          Click Here to Setup Account
         </a>
       </div>
 
@@ -172,8 +167,7 @@ const sendRecruiterInviteEmail = async ({
     </div>
   `;
 
-  // Plain-text alternative: Enclose in angle brackets <...> per RFC 3986 so email clients don't fold/split URLs across lines
-  const plainText = `Dear Recruitment Team at ${companyName},\n\nThe College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications:\n\nComplete Recruiter Setup Link:\n<${directLink}>\n\n(This invitation link is unique to ${recipient} and will expire in 48 hours.)`;
+  const plainText = `Dear Recruitment Team at ${companyName},\n\nThe College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications.\n\nPlease open this invitation in your email app and click "Complete Recruiter Setup" or "Click Here to Setup Account" to finish onboarding.\n\nThis invitation link is unique to ${recipient} and will expire in 48 hours.`;
 
   try {
     const result = await sendEmailViaResend({
@@ -312,26 +306,22 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
       <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 30px auto; width: auto;">
         <tr>
           <td align="center" style="border-radius: 6px; background-color: #2563eb;">
-            <a href="${dashboardLink}" target="_blank" rel="noopener noreferrer" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block; border: 1px solid #2563eb;">
+            <a href="${dashboardLink}" target="_blank" rel="noopener noreferrer" style="background-color: #2563eb; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block; border: 1px solid #2563eb;">
               ${buttonText}
             </a>
           </td>
         </tr>
       </table>
 
-      <p style="color: #64748b; font-size: 12px; margin-top: 25px; margin-bottom: 6px;">
-        If the button above does not work, open the dashboard link below:
-      </p>
-      <p style="margin: 0; font-size: 13px;">
-        <a href="${dashboardLink}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline;">
-          Open Placement Dashboard
+      <!-- Text Link Fallback -->
+      <div style="text-align: center; margin: 20px 0;">
+        <p style="color: #64748b; font-size: 12px; margin: 0 0 6px 0;">
+          If the button above does not work, click the link below:
+        </p>
+        <a href="${dashboardLink}" target="_blank" rel="noopener noreferrer" style="word-break: break-all; white-space: normal; color: #2563eb; font-size: 14px; font-weight: 600; text-decoration: underline; display: inline-block;">
+          Click Here to Open Placement Dashboard
         </a>
-      </p>
-      <p style="margin: 6px 0 15px 0; color: #94a3b8; font-size: 11px; font-family: Consolas, monospace; word-break: break-all; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px 10px;">
-        <a href="${dashboardLink}" target="_blank" rel="noopener noreferrer" style="color: #475569; text-decoration: none;">
-          ${dashboardLink}
-        </a>
-      </p>
+      </div>
 
       <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 25px 0 15px 0;" />
       <p style="color: #94a3b8; font-size: 12px; margin: 0; text-align: center;">
