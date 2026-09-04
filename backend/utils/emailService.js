@@ -1,4 +1,8 @@
+const dns = require('dns');
 const nodemailer = require('nodemailer');
+
+// Force Node.js to resolve IPv4 addresses before IPv6 to resolve ENETUNREACH on Render
+dns.setDefaultResultOrder('ipv4first');
 
 /**
  * Helper to construct a configured Nodemailer Gmail transporter.
@@ -14,7 +18,9 @@ const createTransporter = () => {
   }
 
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user: emailUser,
       pass: emailPass,
