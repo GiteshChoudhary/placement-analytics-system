@@ -53,7 +53,10 @@ const StudentDashboard = () => {
     // Connect to Socket.io server on backend
     const getSocketUrl = () => {
       if (import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
-      if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '');
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
+      if (apiUrl && apiUrl.trim() !== '') {
+        return apiUrl.trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');
+      }
       if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         return window.location.origin;
       }

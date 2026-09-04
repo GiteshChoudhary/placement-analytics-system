@@ -1,10 +1,10 @@
 import axios from 'axios';
 
 // Dynamically resolve base API URL:
-// 1. If VITE_API_URL is defined, use it as the base URL.
-// 2. If VITE_API_URL is not set (local development), fall back to http://localhost:5000/api.
+// 1. If VITE_API_BASE_URL (or VITE_API_URL) is defined, use it as the base URL.
+// 2. If neither is set (local development), fall back to http://localhost:5000/api.
 const getBaseURL = () => {
-  const envUrl = import.meta.env.VITE_API_URL;
+  const envUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
   if (envUrl && envUrl.trim() !== '') {
     const cleanUrl = envUrl.trim().replace(/\/+$/, '');
     return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
