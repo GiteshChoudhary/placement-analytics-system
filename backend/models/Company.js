@@ -29,6 +29,26 @@ const companySchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    description: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    workCulture: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    companyLogoUrl: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    industryType: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     hr: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Student',

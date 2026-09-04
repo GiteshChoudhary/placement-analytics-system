@@ -178,7 +178,7 @@ const inviteHR = async (req, res) => {
       });
     }
 
-    // Resolve or find Company
+    // Resolve or find existing Company (read-only; does not create dummy/draft company)
     let company = null;
     if (companyId) {
       company = await Company.findById(companyId);
@@ -187,14 +187,6 @@ const inviteHR = async (req, res) => {
       company = await Company.findOne({
         name: new RegExp('^' + companyName.trim() + '$', 'i'),
       });
-      if (!company) {
-        // Create draft company record if one doesn't exist yet
-        company = await Company.create({
-          name: companyName.trim(),
-          packageOffered: 0,
-          rolesOffered: [],
-        });
-      }
     }
 
     const resolvedCompanyName = company ? company.name : companyName.trim();
@@ -305,6 +297,10 @@ const verifyInviteToken = async (req, res) => {
           minCGPA: comp.eligibilityCriteria?.minCGPA !== undefined ? comp.eligibilityCriteria.minCGPA : '',
           maxBacklogs: comp.eligibilityCriteria?.maxBacklogs !== undefined ? comp.eligibilityCriteria.maxBacklogs : '',
           rolesOffered: Array.isArray(comp.rolesOffered) ? comp.rolesOffered.join(', ') : '',
+          description: comp.description || '',
+          workCulture: comp.workCulture || '',
+          industryType: comp.industryType || '',
+          companyLogoUrl: comp.companyLogoUrl || '',
         };
       }
     }
@@ -339,6 +335,10 @@ const registerHR = async (req, res) => {
       maxBacklogs,
       packageOffered,
       rolesOffered,
+      description,
+      workCulture,
+      industryType,
+      companyLogoUrl,
     } = req.body;
 
     if (!token || !password) {
@@ -403,12 +403,19 @@ const registerHR = async (req, res) => {
         .filter(Boolean);
     }
 
-    // Create or update the Company record with full hiring criteria
+    // Logo resolution: file upload takes precedence over text field
+    const finalLogoUrl = req.file?.key || req.file?.location || (companyLogoUrl && companyLogoUrl.trim()) || '';
+
+    // Create or update the Company record with full hiring and profile details
     if (!resolvedCompany) {
       resolvedCompany = await Company.create({
         name: (companyName && companyName.trim()) || 'Company',
         packageOffered: parsedPackage,
         rolesOffered: parsedRoles,
+        description: (description && description.trim()) || '',
+        workCulture: (workCulture && workCulture.trim()) || '',
+        industryType: (industryType && industryType.trim()) || '',
+        companyLogoUrl: finalLogoUrl,
         eligibilityCriteria: {
           minCGPA: parsedMinCGPA,
           maxBacklogs: parsedMaxBacklogs,
@@ -421,11 +428,24 @@ const registerHR = async (req, res) => {
       if (rolesOffered !== undefined) {
         resolvedCompany.rolesOffered = parsedRoles;
       }
+      if (description !== undefined) {
+        resolvedCompany.description = description.trim();
+      }
+      if (workCulture !== undefined) {
+        resolvedCompany.workCulture = workCulture.trim();
+      }
+      if (industryType !== undefined) {
+        resolvedCompany.industryType = industryType.trim();
+      }
+      if (finalLogoUrl) {
+        resolvedCompany.companyLogoUrl = finalLogoUrl;
+      }
       resolvedCompany.eligibilityCriteria = {
         minCGPA: parsedMinCGPA,
         maxBacklogs: parsedMaxBacklogs,
       };
     }
+
 
     const finalCompanyId = resolvedCompany._id;
     const finalCompanyName = resolvedCompany.name;

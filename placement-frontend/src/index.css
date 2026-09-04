@@ -1,15 +1,65 @@
+:root {
+  /* Color Palette - Restrained Institutional 5-Color System */
+  --color-primary: #0f172a;               /* Deep Slate Navy for headers, navbar, primary headings */
+  --color-primary-action: #1d4ed8;        /* Clean Institutional Blue for primary action buttons */
+  --color-primary-action-hover: #1e40af;  /* Darker Blue on hover */
+  --color-bg: #f8fafc;                    /* Soft off-white neutral background (Slate 50) */
+  --color-surface: #ffffff;               /* Pure white card and container surface */
+  --color-border: #e2e8f0;                /* Hairline neutral border (Slate 200) */
+  --color-border-subtle: #f1f5f9;         /* Very subtle divider (Slate 100) */
+  
+  /* Text Hierarchy */
+  --color-text-primary: #0f172a;          /* Headings and high-contrast data (Slate 900) */
+  --color-text-body: #334155;             /* Body text, labels, descriptions (Slate 700) */
+  --color-text-muted: #64748b;            /* Metadata, timestamps, helper text (Slate 500) */
+  
+  /* Accent & Semantic Colors (used sparingly) */
+  --color-accent: #15803d;                /* Confident Emerald Green for 'Offer' stage & success */
+  --color-accent-bg: #f0fdf4;             /* Soft green tint */
+  --color-accent-border: #bbf7d0;         /* Soft green border */
+  
+  --color-danger: #b91c1c;                /* Professional deep red for errors and rejections */
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+  
+  --color-warning: #b45309;               /* Muted amber for pending / aptitude / warnings */
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+
+  /* Structure & Geometry */
+  --radius: 8px;                          /* Universal border radius across entire application */
+  --radius-sm: 6px;
+  --shadow-card: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  --shadow-elevated: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  
+  /* Typography Scale */
+  --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-base: 1rem;             /* 16px base (increased from 14px for readability) */
+  --font-size-sm: 0.875rem;           /* 14px for captions, helper text, badges, secondary labels */
+  --font-size-xs: 0.8125rem;          /* 13px for small metadata and tags */
+  --font-size-md: 1.0625rem;          /* 17px for emphasized body/card subheadings */
+  --font-size-lg: 1.25rem;            /* 20px for section subheaders */
+  --font-size-xl: 1.5rem;             /* 24px for section headers (h2) */
+  --font-size-2xl: 1.875rem;          /* 30px for page titles (h1) */
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+html {
+  font-size: 16px;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  background-color: #f1f5f9;
-  color: #1e293b;
+  font-family: var(--font-main);
+  background-color: var(--color-bg);
+  color: var(--color-text-body);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -18,8 +68,195 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background-color: var(--color-bg);
 }
 
-button {
-  font-family: inherit;
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-text-primary);
+  font-family: var(--font-main);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+h1 {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+p {
+  color: var(--color-text-body);
+}
+
+/* Base Form and Table Typography Scaling */
+button, input, select, textarea {
+  font-family: var(--font-main);
+  font-size: var(--font-size-base);
+}
+
+.table-responsive, table, .applications-table {
+  font-size: var(--font-size-base);
+}
+
+.applications-table th {
+  font-size: var(--font-size-sm);
+}
+
+.form-group label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.helper-text, .caption, .metadata-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* =========================================================================
+   Universal Button System
+   ========================================================================= */
+.btn-primary {
+  background-color: var(--color-primary-action);
+  color: #ffffff;
+  border: 1px solid transparent;
+  padding: 0.55rem 1.15rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background-color 0.15s ease;
+  text-decoration: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-action-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: #ffffff;
+  color: var(--color-text-body);
+  border: 1px solid #cbd5e1;
+  padding: 0.55rem 1.15rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  text-decoration: none;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+  color: var(--color-text-primary);
+}
+
+.btn-danger {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
+  padding: 0.45rem 0.95rem;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  transition: background-color 0.15s ease;
+  text-decoration: none;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #fee2e2;
+}
+
+/* =========================================================================
+   Universal Card Component
+   ========================================================================= */
+.app-card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+}
+
+/* =========================================================================
+   Intentional Empty State System
+   ========================================================================= */
+.app-empty-state {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-empty-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius);
+  background-color: #f1f5f9;
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.85rem;
+}
+
+.app-empty-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.35rem;
+}
+
+.app-empty-desc {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  max-width: 440px;
+  line-height: 1.5;
+  margin: 0 auto 1.25rem auto;
+}
+
+/* =========================================================================
+   Restrained Keyframe Animations
+   ========================================================================= */
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

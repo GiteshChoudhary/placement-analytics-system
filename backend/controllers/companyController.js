@@ -1,11 +1,20 @@
 const Company = require('../models/Company');
+const { getPresignedUrl } = require('../config/s3Config');
 
 // @desc    Create or update a company drive profile
 // @route   POST /api/companies
 // @access  Private (TPO or company_hr)
 const createCompany = async (req, res) => {
   try {
-    const { eligibilityCriteria, packageOffered, rolesOffered } = req.body;
+    const {
+      eligibilityCriteria,
+      packageOffered,
+      rolesOffered,
+      description,
+      workCulture,
+      industryType,
+      companyLogoUrl,
+    } = req.body;
     let name = req.body.name;
 
     // If recruiter/company_hr, prioritize their registered companyName
@@ -62,6 +71,10 @@ const createCompany = async (req, res) => {
         maxBacklogs: isNaN(maxBacklogs) ? 0 : maxBacklogs,
       };
       company.rolesOffered = parsedRoles;
+      if (description !== undefined) company.description = description.trim();
+      if (workCulture !== undefined) company.workCulture = workCulture.trim();
+      if (industryType !== undefined) company.industryType = industryType.trim();
+      if (companyLogoUrl !== undefined) company.companyLogoUrl = companyLogoUrl.trim();
       if (isHR) company.hr = req.student._id;
       await company.save();
     } else {
@@ -74,6 +87,10 @@ const createCompany = async (req, res) => {
         },
         packageOffered: parseFloat(packageOffered),
         rolesOffered: parsedRoles,
+        description: (description && description.trim()) || '',
+        workCulture: (workCulture && workCulture.trim()) || '',
+        industryType: (industryType && industryType.trim()) || '',
+        companyLogoUrl: (companyLogoUrl && companyLogoUrl.trim()) || '',
         hr: isHR ? req.student._id : undefined,
       });
     }
@@ -99,12 +116,31 @@ const createCompany = async (req, res) => {
   }
 };
 
-// @desc    Get all companies
+// @desc    Get all companies with presigned logo URLs for public S3 items
 // @route   GET /api/companies
 // @access  Public
 const getAllCompanies = async (req, res) => {
   try {
-    const companies = await Company.find().sort({ createdAt: -1 });
+    const rawCompanies = await Company.find().sort({ createdAt: -1 }).lean();
+
+    const companies = await Promise.all(
+      rawCompanies.map(async (comp) => {
+        if (comp.companyLogoUrl) {
+          // If stored as an S3 key or S3 URL from our bucket, generate presigned URL
+          if (
+            comp.companyLogoUrl.startsWith('company-logos/') ||
+            comp.companyLogoUrl.includes('.amazonaws.com/')
+          ) {
+            try {
+              comp.companyLogoUrl = await getPresignedUrl(comp.companyLogoUrl, 86400); // 24hr validity
+            } catch (err) {
+              console.warn(`[Presigned URL] Failed to sign logo for ${comp.name}:`, err.message);
+            }
+          }
+        }
+        return comp;
+      })
+    );
 
     return res.status(200).json({
       success: true,

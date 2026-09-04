@@ -219,19 +219,17 @@ const RecruiterDashboard = () => {
             <p>Loading candidate applications...</p>
           </div>
         ) : filteredApplications.length === 0 ? (
-          <div className="empty-state" style={{ padding: '3.5rem 1rem' }}>
-            <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '0.75rem' }}>
-              📭
-            </span>
-            <p style={{ fontWeight: '600', color: '#334155' }}>
+          <div className="app-empty-state">
+            <div className="app-empty-icon-box">📭</div>
+            <h3 className="app-empty-title">
               {applications.length === 0
-                ? 'No students have applied to this company drive yet.'
-                : 'No candidates match your search or filter criteria.'}
-            </p>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                ? 'No students have applied to this drive yet'
+                : 'No candidates match your filters'}
+            </h3>
+            <p className="app-empty-desc">
               {applications.length === 0
-                ? 'When eligible students apply to your drive from their portal, they will appear here in real-time.'
-                : 'Try adjusting your search query or stage filter.'}
+                ? 'When eligible students apply to your placement drive from their portal, their applications will appear here in real-time.'
+                : 'Try adjusting your search keywords or round stage filter.'}
             </p>
           </div>
         ) : (

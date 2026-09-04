@@ -18,7 +18,7 @@ const RecruiterSetup = () => {
     companyName: '',
   });
 
-  // Form state (credentials + company hiring details)
+  // Form state (credentials + company hiring details + about company)
   const [formData, setFormData] = useState({
     name: '',
     password: '',
@@ -27,7 +27,12 @@ const RecruiterSetup = () => {
     minCGPA: '',
     maxBacklogs: '0',
     rolesOffered: '',
+    description: '',
+    workCulture: '',
+    industryType: '',
   });
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -56,7 +61,13 @@ const RecruiterSetup = () => {
               minCGPA: res.data.companyDetails.minCGPA !== '' ? String(res.data.companyDetails.minCGPA) : prev.minCGPA,
               maxBacklogs: res.data.companyDetails.maxBacklogs !== '' ? String(res.data.companyDetails.maxBacklogs) : prev.maxBacklogs,
               rolesOffered: res.data.companyDetails.rolesOffered || prev.rolesOffered,
+              description: res.data.companyDetails.description || prev.description,
+              workCulture: res.data.companyDetails.workCulture || prev.workCulture,
+              industryType: res.data.companyDetails.industryType || prev.industryType,
             }));
+            if (res.data.companyDetails.companyLogoUrl) {
+              setLogoPreview(res.data.companyDetails.companyLogoUrl);
+            }
           }
         }
       } catch (err) {
@@ -78,6 +89,14 @@ const RecruiterSetup = () => {
       [e.target.name]: e.target.value,
     });
     if (errorMessage) setErrorMessage('');
+  };
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLogoFile(file);
+      setLogoPreview(URL.createObjectURL(file));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -102,14 +121,25 @@ const RecruiterSetup = () => {
     setIsSubmitting(true);
 
     try {
-      const res = await API.post('/auth/register-hr', {
-        token,
-        name: formData.name.trim(),
-        password: formData.password,
-        packageOffered: formData.packageOffered,
-        minCGPA: formData.minCGPA,
-        maxBacklogs: formData.maxBacklogs,
-        rolesOffered: formData.rolesOffered,
+      const submitData = new FormData();
+      submitData.append('token', token);
+      submitData.append('name', formData.name.trim());
+      submitData.append('password', formData.password);
+      submitData.append('packageOffered', formData.packageOffered);
+      submitData.append('minCGPA', formData.minCGPA);
+      submitData.append('maxBacklogs', formData.maxBacklogs);
+      submitData.append('rolesOffered', formData.rolesOffered);
+      submitData.append('description', formData.description);
+      submitData.append('workCulture', formData.workCulture);
+      submitData.append('industryType', formData.industryType);
+      if (logoFile) {
+        submitData.append('logo', logoFile);
+      }
+
+      const res = await API.post('/auth/register-hr', submitData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
 
       if (res.data.success && res.data.token) {
@@ -311,6 +341,100 @@ const RecruiterSetup = () => {
                 value={formData.maxBacklogs}
                 onChange={handleChange}
               />
+            </div>
+          </div>
+
+          {/* Section Divider: About Company (Student Context) */}
+          <div style={{ margin: '1.75rem 0 1rem', paddingBottom: '0.5rem', borderBottom: '2px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '1.05rem', color: '#0f172a', margin: '0 0 0.25rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span>🏢</span> About the Company (Student Context)
+            </h3>
+            <p style={{ color: '#64748b', fontSize: '0.82rem', margin: 0 }}>
+              Provide key background information and work culture highlights so students understand your organization before applying.
+            </p>
+          </div>
+
+          {/* Industry Type */}
+          <div className="form-group">
+            <label htmlFor="industryType">Industry / Domain</label>
+            <input
+              type="text"
+              id="industryType"
+              name="industryType"
+              placeholder="e.g. Product-based Software, FinTech, IT Services, Core Engineering"
+              value={formData.industryType}
+              onChange={handleChange}
+            />
+          </div>
+
+          {/* About Company / Description */}
+          <div className="form-group">
+            <label htmlFor="description">About the Company (Mission, Overview & Domain)</label>
+            <textarea
+              id="description"
+              name="description"
+              rows={4}
+              placeholder="Describe your company's mission, core products or services, and growth opportunities..."
+              value={formData.description}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                padding: '0.65rem 0.85rem',
+                border: '1px solid #cbd5e1',
+                borderRadius: 'var(--radius, 8px)',
+                fontFamily: 'inherit',
+                fontSize: '0.875rem',
+                resize: 'vertical',
+              }}
+            />
+          </div>
+
+          {/* Work Culture */}
+          <div className="form-group">
+            <label htmlFor="workCulture">Work Culture & Environment (Optional)</label>
+            <textarea
+              id="workCulture"
+              name="workCulture"
+              rows={3}
+              placeholder="Highlight team values, mentorship, work-life balance, hybrid/remote policy, and benefits..."
+              value={formData.workCulture}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                padding: '0.65rem 0.85rem',
+                border: '1px solid #cbd5e1',
+                borderRadius: 'var(--radius, 8px)',
+                fontFamily: 'inherit',
+                fontSize: '0.875rem',
+                resize: 'vertical',
+              }}
+            />
+          </div>
+
+          {/* Company Logo / Banner Image Upload */}
+          <div className="form-group">
+            <label htmlFor="logo">Company Logo / Banner Image (Optional)</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <input
+                type="file"
+                id="logo"
+                name="logo"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                onChange={handleLogoChange}
+                style={{ fontSize: '0.875rem' }}
+              />
+              {logoPreview && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f1f5f9', padding: '0.35rem 0.75rem', borderRadius: 'var(--radius, 8px)', border: '1px solid #e2e8f0' }}>
+                  <img
+                    src={logoPreview}
+                    alt="Logo Preview"
+                    style={{ width: '36px', height: '36px', objectFit: 'contain', borderRadius: '4px', background: '#ffffff' }}
+                  />
+                  <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: '500' }}>
+                    {logoFile ? logoFile.name : 'Current Logo'}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

@@ -128,7 +128,72 @@ const uploadResumeMiddleware = async (req, res, next) => {
   }
 };
 
+// =========================================================================
+// S3 Storage engine for Company Logos
+// =========================================================================
+const s3LogoStorage = multerS3({
+  s3: s3Client,
+  bucket: BUCKET_NAME || process.env.AWS_BUCKET_NAME,
+  contentType: multerS3.AUTO_CONTENT_TYPE,
+  metadata: (req, file, cb) => {
+    cb(null, {
+      fieldName: file.fieldname,
+    });
+  },
+  key: (req, file, cb) => {
+    const timestamp = Date.now();
+    const safeName = (file.originalname || 'logo.png').replace(/[^a-zA-Z0-9.-]/g, '_');
+    const fileName = `company-logos/${timestamp}_${safeName}`;
+    console.log(`[Logo Upload] S3 Key: "${fileName}", Mimetype: "${file.mimetype}"`);
+    cb(null, fileName);
+  },
+});
+
+const logoFileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml', 'image/gif'];
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid image type. Only JPEG, PNG, WEBP, SVG, and GIF are allowed!'), false);
+  }
+};
+
+const uploadLogo = multer({
+  storage: s3LogoStorage,
+  fileFilter: logoFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+}).single('logo');
+
+const uploadLogoMiddleware = (req, res, next) => {
+  // If Content-Type is not multipart, skip multer processing
+  const contentType = req.headers['content-type'] || '';
+  if (!contentType.includes('multipart/form-data')) {
+    return next();
+  }
+
+  uploadLogo(req, res, (err) => {
+    if (err) {
+      console.error('[Logo Upload Error]:', err.message);
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          success: false,
+          message: 'Logo file size exceeds the 5MB limit.',
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        message: err.message || 'Error uploading company logo.',
+      });
+    }
+    next();
+  });
+};
+
 module.exports = {
   uploadResumeMiddleware,
+  uploadLogoMiddleware,
 };
+
 

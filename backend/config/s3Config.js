@@ -42,12 +42,25 @@ const getPresignedUrl = async (key, expiresIn = 300) => {
     }
   }
 
-  const command = new GetObjectCommand({
+  const commandInput = {
     Bucket: BUCKET_NAME,
     Key: objectKey,
-    ResponseContentType: 'application/pdf',
-  });
+  };
 
+  // Only set ResponseContentType if explicitly a PDF or specified
+  if (objectKey.toLowerCase().endsWith('.pdf')) {
+    commandInput.ResponseContentType = 'application/pdf';
+  } else if (objectKey.toLowerCase().endsWith('.png')) {
+    commandInput.ResponseContentType = 'image/png';
+  } else if (objectKey.toLowerCase().endsWith('.jpg') || objectKey.toLowerCase().endsWith('.jpeg')) {
+    commandInput.ResponseContentType = 'image/jpeg';
+  } else if (objectKey.toLowerCase().endsWith('.webp')) {
+    commandInput.ResponseContentType = 'image/webp';
+  } else if (objectKey.toLowerCase().endsWith('.svg')) {
+    commandInput.ResponseContentType = 'image/svg+xml';
+  }
+
+  const command = new GetObjectCommand(commandInput);
   return await getSignedUrl(s3Client, command, { expiresIn });
 };
 

@@ -1,5 +1,6 @@
 const Application = require('../models/Application');
 const Company = require('../models/Company');
+const { sendStageUpdateEmail } = require('../utils/emailService');
 
 const VALID_STAGES = ['eligibility', 'aptitude', 'technical', 'offer', 'rejected'];
 
@@ -161,6 +162,23 @@ const updateApplicationStage = async (req, res) => {
       } else {
         console.log(`[Socket.io] Student ${studentId} is currently not connected to Socket.io`);
       }
+    }
+
+    // Asynchronous Email Notification to Student (fire-and-forget, non-blocking)
+    const studentEmail = application.student?.email;
+    const studentName = application.student?.name || 'Student';
+
+    if (studentEmail) {
+      sendStageUpdateEmail(studentEmail, studentName, companyName, newStage).catch((err) => {
+        console.error(
+          `[Email Service] Failed to dispatch stage update email to ${studentEmail}:`,
+          err.message || err
+        );
+      });
+    } else {
+      console.warn(
+        `[Email Service] Student email not found for application ${application._id}; skipping email dispatch.`
+      );
     }
 
     return res.status(200).json({

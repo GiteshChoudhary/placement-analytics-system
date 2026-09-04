@@ -22,6 +22,9 @@ const StudentDashboard = () => {
   // Real-time notification state (from Socket.io)
   const [realtimeNotification, setRealtimeNotification] = useState(null);
 
+  // Selected company for "About Company" modal
+  const [selectedCompanyModal, setSelectedCompanyModal] = useState(null);
+
   // Resume state management
   const [resumeUrl, setResumeUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -529,10 +532,11 @@ const StudentDashboard = () => {
         </div>
 
         {applications.length === 0 ? (
-          <div className="empty-state">
-            <p>You haven't applied anywhere yet.</p>
-            <p style={{ fontSize: '0.88rem', color: '#94a3b8' }}>
-              Check out the available companies below and submit your application!
+          <div className="app-empty-state">
+            <div className="app-empty-icon-box">📋</div>
+            <h3 className="app-empty-title">No applications submitted yet</h3>
+            <p className="app-empty-desc">
+              Explore open placement drives below and submit your profile to begin the selection process.
             </p>
           </div>
         ) : (
@@ -581,8 +585,12 @@ const StudentDashboard = () => {
         </div>
 
         {companies.length === 0 ? (
-          <div className="empty-state">
-            <p>No placement drives are active at the moment.</p>
+          <div className="app-empty-state">
+            <div className="app-empty-icon-box">🏢</div>
+            <h3 className="app-empty-title">No active placement drives</h3>
+            <p className="app-empty-desc">
+              New company placement drives will appear here once published by the Training & Placement Office.
+            </p>
           </div>
         ) : (
           <div className="companies-grid">
@@ -594,7 +602,24 @@ const StudentDashboard = () => {
                 <div key={company._id} className="company-card">
                   <div>
                     <div className="company-card-header">
-                      <h3 className="company-name">{company.name}</h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                        {company.companyLogoUrl ? (
+                          <img
+                            src={company.companyLogoUrl}
+                            alt={company.name}
+                            className="company-card-logo"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div className="company-card-logo-placeholder">🏢</div>
+                        )}
+                        <div style={{ minWidth: 0 }}>
+                          <h3 className="company-name" style={{ margin: 0 }}>{company.name}</h3>
+                          {company.industryType && (
+                            <span className="company-industry-tag">{company.industryType}</span>
+                          )}
+                        </div>
+                      </div>
                       <span className="package-badge">
                         {company.packageOffered} LPA
                       </span>
@@ -622,6 +647,17 @@ const StudentDashboard = () => {
                         {company.eligibilityCriteria?.maxBacklogs ?? '0'}
                       </div>
                     </div>
+
+                    {/* Learn More & About Company Action */}
+                    <div style={{ marginBottom: '0.85rem' }}>
+                      <button
+                        type="button"
+                        className="btn-learn-more"
+                        onClick={() => setSelectedCompanyModal(company)}
+                      >
+                        ℹ️ About this company & culture →
+                      </button>
+                    </div>
                   </div>
 
                   {/* Apply Action Button */}
@@ -646,8 +682,135 @@ const StudentDashboard = () => {
           </div>
         )}
       </section>
+
+      {/* Company Details Modal */}
+      {selectedCompanyModal && (
+        <div
+          className="company-modal-backdrop"
+          onClick={() => setSelectedCompanyModal(null)}
+        >
+          <div
+            className="company-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="company-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, minWidth: 0 }}>
+                {selectedCompanyModal.companyLogoUrl ? (
+                  <img
+                    src={selectedCompanyModal.companyLogoUrl}
+                    alt={selectedCompanyModal.name}
+                    className="company-modal-logo"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className="company-modal-logo-placeholder">🏢</div>
+                )}
+                <div style={{ minWidth: 0 }}>
+                  <h2 style={{ fontSize: '1.35rem', margin: '0 0 0.25rem', color: '#0f172a' }}>
+                    {selectedCompanyModal.name}
+                  </h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {selectedCompanyModal.industryType && (
+                      <span className="company-industry-tag">
+                        {selectedCompanyModal.industryType}
+                      </span>
+                    )}
+                    <span className="package-badge">
+                      {selectedCompanyModal.packageOffered} LPA
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="realtime-dismiss-btn"
+                onClick={() => setSelectedCompanyModal(null)}
+                style={{ fontSize: '1.25rem' }}
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="company-modal-body">
+              {/* Roles Offered */}
+              {selectedCompanyModal.rolesOffered?.length > 0 && (
+                <div className="company-modal-section">
+                  <h4>🎯 Roles Offered</h4>
+                  <div className="roles-container" style={{ margin: 0 }}>
+                    {selectedCompanyModal.rolesOffered.map((role, idx) => (
+                      <span key={idx} className="role-tag">
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Eligibility Criteria */}
+              <div className="company-modal-section">
+                <h4>📋 Eligibility Requirements</h4>
+                <div className="criteria-box" style={{ margin: 0 }}>
+                  <div>
+                    <strong>Minimum CGPA:</strong> {selectedCompanyModal.eligibilityCriteria?.minCGPA || '0.0'}
+                  </div>
+                  <div>
+                    <strong>Maximum Backlogs:</strong> {selectedCompanyModal.eligibilityCriteria?.maxBacklogs ?? '0'}
+                  </div>
+                </div>
+              </div>
+
+              {/* About the Company */}
+              <div className="company-modal-section">
+                <h4>🏢 About the Company</h4>
+                <p>
+                  {selectedCompanyModal.description
+                    ? selectedCompanyModal.description
+                    : 'The recruiter has not yet added a detailed description for this company.'}
+                </p>
+              </div>
+
+              {/* Work Culture & Environment */}
+              {selectedCompanyModal.workCulture && (
+                <div className="company-modal-section">
+                  <h4>🌱 Work Culture & Environment</h4>
+                  <p>{selectedCompanyModal.workCulture}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="company-modal-footer">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setSelectedCompanyModal(null)}
+              >
+                Close
+              </button>
+              {hasApplied(selectedCompanyModal._id) ? (
+                <div className="applied-btn" style={{ width: 'auto', padding: '0.55rem 1.25rem' }}>
+                  <span>✓</span> Already Applied
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    handleApply(selectedCompanyModal._id);
+                    setSelectedCompanyModal(null);
+                  }}
+                  disabled={applyingCompanyId === selectedCompanyModal._id}
+                >
+                  {applyingCompanyId === selectedCompanyModal._id ? 'Submitting...' : 'Apply to Drive'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+
 };
 
 export default StudentDashboard;

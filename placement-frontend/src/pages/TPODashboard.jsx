@@ -520,10 +520,11 @@ const TPODashboard = () => {
             </div>
 
             {placedStudents.length === 0 ? (
-              <div className="empty-state">
-                <p>No students have reached the Offer stage yet.</p>
-                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-                  When students advance to the "offer" stage in Manage Applications, they will automatically appear here.
+              <div className="app-empty-state">
+                <div className="app-empty-icon-box">🎓</div>
+                <h3 className="app-empty-title">No offers recorded yet</h3>
+                <p className="app-empty-desc">
+                  When students advance to the "offer" stage in Manage Applications, their placements will automatically appear here.
                 </p>
               </div>
             ) : (
@@ -590,10 +591,13 @@ const TPODashboard = () => {
             </div>
 
             {filteredCompanies.length === 0 ? (
-              <div className="empty-state">
-                <p>{companiesList.length === 0 ? 'No companies registered yet.' : 'No companies match your search criteria.'}</p>
-                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-                  Use the "Invite Recruiter" tab to invite new companies and HR representatives to onboard.
+              <div className="app-empty-state">
+                <div className="app-empty-icon-box">🏢</div>
+                <h3 className="app-empty-title">
+                  {companiesList.length === 0 ? 'No companies registered yet' : 'No companies match your search'}
+                </h3>
+                <p className="app-empty-desc">
+                  Use the "Invite Recruiter" tab to onboard new company drives and configure hiring packages.
                 </p>
               </div>
             ) : (
@@ -673,8 +677,12 @@ const TPODashboard = () => {
           </div>
 
           {filteredApplications.length === 0 ? (
-            <div className="empty-state">
-              <p>No applications match your search criteria.</p>
+            <div className="app-empty-state">
+              <div className="app-empty-icon-box">📋</div>
+              <h3 className="app-empty-title">No applications found</h3>
+              <p className="app-empty-desc">
+                No student applications match the current search filters.
+              </p>
             </div>
           ) : (
             <div className="table-responsive">
