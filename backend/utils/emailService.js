@@ -1,56 +1,108 @@
-const nodemailer = require('nodemailer');
-const dns = require('dns');
-const { cleanBaseUrl, buildRecruiterInviteLink } = require('./urlHelper');
-
-// Force IPv4 lookup first to prevent IPv6 routing failures (ENETUNREACH) on cloud platforms like Render
-if (dns && typeof dns.setDefaultResultOrder === 'function') {
-  dns.setDefaultResultOrder('ipv4first');
+let BrevoClient;
+try {
+  BrevoClient = require('@getbrevo/brevo').BrevoClient;
+} catch (_) {
+  // Direct HTTPS fetch fallback will be used if SDK is not present
 }
 
+const { cleanBaseUrl, buildRecruiterInviteLink } = require('./urlHelper');
+
 /**
- * Creates and configures the Nodemailer SMTP transporter.
- * Configured with service: 'gmail', host: 'smtp.gmail.com', port: 465, secure: true,
- * explicit TLS configuration, and debug logging to bypass cloud firewall restrictions.
+ * Resolves the sender email and name.
+ * Uses process.env.BREVO_SENDER_EMAIL or process.env.EMAIL_USER.
  */
-let cachedTransporter = null;
+const getSenderInfo = () => {
+  const email =
+    process.env.BREVO_SENDER_EMAIL ||
+    process.env.EMAIL_USER ||
+    'placementcell@college.edu';
+  const name = process.env.EMAIL_FROM_NAME || 'Campus Placement Cell';
+  return { name, email: email.trim() };
+};
 
-const createTransporter = () => {
-  const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_PASS;
-
-  if (!user || !pass) {
+/**
+ * Core email dispatcher using Brevo (Sendinblue) v3 API via HTTPS (Port 443).
+ * Bypasses Render free tier SMTP blocking completely.
+ *
+ * @param {Object} options
+ * @param {string|string[]} options.to - Recipient email address(es)
+ * @param {string} [options.recipientName] - Recipient name
+ * @param {string} options.subject - Email subject
+ * @param {string} options.html - HTML email content
+ * @param {string} [options.text] - Plain text fallback
+ * @returns {Promise<{id: string}>} Result object with message ID
+ */
+const sendEmailViaBrevo = async ({ to, recipientName, subject, html, text }) => {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey || apiKey.trim() === '') {
     throw new Error(
-      'Missing email credentials: EMAIL_USER and EMAIL_PASS must be defined in your environment variables.'
+      'Missing Brevo API Key: BREVO_API_KEY must be defined in your backend .env file or Render environment variables. Get your free key at https://app.brevo.com/settings/keys/api'
     );
   }
 
-  return nodemailer.createTransport({
-    service: 'gmail',
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user,
-      pass,
-    },
-    tls: {
-      rejectUnauthorized: false,
-      minVersion: 'TLSv1.2',
-    },
-    logger: true,
-    debug: true,
-  });
-};
+  const sender = getSenderInfo();
+  const recipients = (Array.isArray(to) ? to : [to]).map((email) => ({
+    email: typeof email === 'string' ? email.trim() : email.email,
+    name: recipientName || (typeof email === 'object' ? email.name : undefined) || 'Recipient',
+  }));
 
-const getTransporter = () => {
-  if (!cachedTransporter) {
-    cachedTransporter = createTransporter();
+  console.log(
+    `[Brevo API] Sending email via HTTPS (Port 443) from "${sender.name} <${sender.email}>" to: ${recipients.map((r) => r.email).join(', ')}`
+  );
+
+  // 1. Try Brevo SDK if available
+  if (BrevoClient) {
+    try {
+      const client = new BrevoClient({ apiKey: apiKey.trim() });
+      const result = await client.transactionalEmails.sendTransacEmail({
+        sender,
+        to: recipients,
+        subject,
+        htmlContent: html,
+        textContent: text || undefined,
+      });
+
+      console.log(`[Brevo SDK Success] Email dispatched successfully. ID: ${result?.messageId || 'brevo_ok'}`);
+      return { id: result?.messageId || 'brevo_ok' };
+    } catch (sdkErr) {
+      if (sdkErr.body && sdkErr.body.message) {
+        console.error('[Brevo SDK API Error]:', sdkErr.body);
+        throw new Error(`Brevo delivery failed: ${sdkErr.body.message}`);
+      }
+      console.warn('[Brevo SDK] Encountered error, trying direct HTTPS fetch fallback:', sdkErr.message);
+    }
   }
-  return cachedTransporter;
+
+  // 2. Direct HTTPS v3 endpoint request (Render allows port 443 outbound without firewall blocking)
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'api-key': apiKey.trim(),
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender,
+      to: recipients,
+      subject,
+      htmlContent: html,
+      textContent: text || undefined,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error('[Brevo HTTPS Error]:', data);
+    throw new Error(`Brevo delivery failed: ${data.message || JSON.stringify(data)}`);
+  }
+
+  console.log(`[Brevo HTTPS Success] Email dispatched successfully. ID: ${data.messageId || 'brevo_ok'}`);
+  return { id: data.messageId || 'brevo_ok' };
 };
 
 /**
- * Dispatches an email invitation to a Recruiter / HR using Nodemailer SMTP.
+ * Dispatches an email invitation to a Recruiter / HR using Brevo HTTPS API.
  *
  * @param {Object} options
  * @param {string} [options.to] - Recruiter's email address
@@ -58,7 +110,7 @@ const getTransporter = () => {
  * @param {string} [options.companyName] - Name of the inviting company
  * @param {string} [options.token] - Signed invitation JWT
  * @param {string} [options.inviteLink] - Complete registration link
- * @throws {Error} If credentials are missing or SMTP delivery fails
+ * @throws {Error} If credentials are missing or Brevo API call fails
  */
 const sendRecruiterInviteEmail = async ({
   to,
@@ -133,31 +185,29 @@ const sendRecruiterInviteEmail = async ({
     </div>
   `;
 
-  const plainText = `Dear Recruitment Team at ${companyName},\n\nThe College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications.\n\nPlease open this invitation in your email app and click "Complete Recruiter Setup" or "Click Here to Setup Account" to finish onboarding.\n\nDirect Link: ${directLink}\n\nThis invitation link is unique to ${recipient} and will expire in 48 hours.`;
-
-  const mailOptions = {
-    from: `"Campus Placement Cell" <${process.env.EMAIL_USER}>`,
-    to: recipient,
-    subject: 'Invitation to Onboard: Campus Placement Drive',
-    html: htmlContent,
-    text: plainText,
-  };
+  const plainText = `Dear Recruitment Team at ${companyName},\n\nThe College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications.\n\nPlease open this invitation in your email app and click "Complete Recruiter Setup" or "Click Here to Setup Account" to finish onboarding.\n\nSetup Link: ${directLink}\n\nThis invitation link is unique to ${recipient} and will expire in 48 hours.`;
 
   try {
-    const transporter = getTransporter();
-    const info = await transporter.sendMail(mailOptions);
+    const result = await sendEmailViaBrevo({
+      to: recipient,
+      recipientName: companyName ? `${companyName} Recruiter` : 'Recruiter',
+      subject: 'Invitation to Onboard: Campus Placement Drive',
+      html: htmlContent,
+      text: plainText,
+    });
+
     console.log(
-      `[Email Service] Invitation email successfully sent to ${recipient} via Nodemailer (Message ID: ${info.messageId})`
+      `[Email Service] Invitation email successfully sent to ${recipient} via Brevo (ID: ${result.id})`
     );
-    return { success: true, messageId: info.messageId };
+    return { success: true, messageId: result.id };
   } catch (error) {
-    console.error(`[Email Service] Nodemailer delivery failed for ${recipient}:`, error.message);
+    console.error(`[Email Service] Brevo dispatch failure for ${recipient}:`, error.message);
     throw error;
   }
 };
 
 /**
- * Dispatches an email notification to a student when their application stage changes.
+ * Dispatches an email notification to a student when their application stage changes using Brevo HTTPS API.
  *
  * @param {string} studentEmail - Student's email address
  * @param {string} studentName - Student's name
@@ -299,24 +349,22 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
     </div>
   `;
 
-  const mailOptions = {
-    from: `"Campus Placement Cell" <${process.env.EMAIL_USER}>`,
-    to: studentEmail,
-    subject,
-    text: plainText,
-    html: htmlContent,
-  };
-
   try {
-    const transporter = getTransporter();
-    const info = await transporter.sendMail(mailOptions);
+    const result = await sendEmailViaBrevo({
+      to: studentEmail,
+      recipientName: studentName,
+      subject,
+      text: plainText,
+      html: htmlContent,
+    });
+
     console.log(
-      `[Email Service] Stage update email successfully sent to ${studentEmail} for ${companyName} (${newStage}) via Nodemailer (Message ID: ${info.messageId})`
+      `[Email Service] Stage update email successfully sent to ${studentEmail} for ${companyName} (${newStage}) via Brevo (ID: ${result.id})`
     );
-    return { success: true, messageId: info.messageId };
+    return { success: true, messageId: result.id };
   } catch (error) {
     console.error(
-      `[Email Service] Nodemailer failure while sending stage update to ${studentEmail}:`,
+      `[Email Service] Brevo failure while sending stage update to ${studentEmail}:`,
       error.message
     );
     throw error;
