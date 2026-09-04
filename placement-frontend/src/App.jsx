@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -11,9 +11,16 @@ import RecruiterSetup from './pages/RecruiterSetup';
 import HRDashboard from './pages/HRDashboard';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 
-// Root redirect handler based on auth status & role
+// Root redirect handler based on auth status, role & invite token
 const RootRedirect = () => {
   const { isAuthenticated, role, loading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+
+  // If recruiter onboarding token is present on root URL, load RecruiterSetup directly
+  if (token) {
+    return <RecruiterSetup />;
+  }
 
   if (loading) {
     return <div style={{ textAlign: 'center', marginTop: '3rem' }}>Loading...</div>;
@@ -46,6 +53,9 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/recruiter-setup" element={<RecruiterSetup />} />
+            <Route path="/recruiter/setup" element={<RecruiterSetup />} />
+            <Route path="/setup-recruiter" element={<RecruiterSetup />} />
+            <Route path="/register/recruiter" element={<RecruiterSetup />} />
 
             {/* Protected Student Route */}
             <Route

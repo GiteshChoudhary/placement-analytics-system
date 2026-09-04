@@ -1,90 +1,56 @@
-let Resend;
-try {
-  Resend = require('resend').Resend;
-} catch (_) {
-  // Fallback to fetch if resend package is not present
-}
-
+const nodemailer = require('nodemailer');
+const dns = require('dns');
 const { cleanBaseUrl, buildRecruiterInviteLink } = require('./urlHelper');
 
+// Force IPv4 lookup first to prevent IPv6 routing failures (ENETUNREACH) on cloud platforms like Render
+if (dns && typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 /**
- * Core email dispatcher using Resend API (HTTPS / Port 443).
- * Replaces Nodemailer SMTP to prevent Render firewall connection timeouts (ports 25, 465, 587).
- *
- * @param {Object} options
- * @param {string|string[]} options.to - Recipient email address(es)
- * @param {string} options.subject - Email subject
- * @param {string} options.html - HTML email content
- * @param {string} [options.text] - Plain text fallback
- * @returns {Promise<{id: string}>} Result object with message ID
+ * Creates and configures the Nodemailer SMTP transporter.
+ * Configured with service: 'gmail', host: 'smtp.gmail.com', port: 465, secure: true,
+ * explicit TLS configuration, and debug logging to bypass cloud firewall restrictions.
  */
-const sendEmailViaResend = async ({ to, subject, html, text }) => {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
+let cachedTransporter = null;
+
+const createTransporter = () => {
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASS;
+
+  if (!user || !pass) {
     throw new Error(
-      'Missing Resend API Key: RESEND_API_KEY must be defined in your backend .env file or Render environment variables. Get your free API key at https://resend.com'
+      'Missing email credentials: EMAIL_USER and EMAIL_PASS must be defined in your environment variables.'
     );
   }
 
-  // Resend requires a verified domain or 'onboarding@resend.dev' for free testing
-  const fromAddress =
-    process.env.RESEND_FROM || 'Placement Cell <onboarding@resend.dev>';
-
-  const recipients = Array.isArray(to) ? to : [to];
-
-  // 1. Try official Resend SDK if available
-  if (Resend) {
-    try {
-      const resendClient = new Resend(apiKey);
-      const { data, error } = await resendClient.emails.send({
-        from: fromAddress,
-        to: recipients,
-        subject,
-        html,
-        text: text || undefined,
-      });
-
-      if (error) {
-        console.error('[Resend SDK Error]:', error);
-        throw new Error(`Resend delivery failed: ${error.message || JSON.stringify(error)}`);
-      }
-
-      return { id: data?.id || 'resend_ok' };
-    } catch (err) {
-      if (err.message && err.message.startsWith('Resend delivery failed')) {
-        throw err;
-      }
-      console.warn('[Email Service] Resend SDK failed, trying HTTPS fetch fallback:', err.message);
-    }
-  }
-
-  // 2. Direct HTTPS fetch fallback (zero-dependency, Node 18+)
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
+  return nodemailer.createTransport({
+    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user,
+      pass,
     },
-    body: JSON.stringify({
-      from: fromAddress,
-      to: recipients,
-      subject,
-      html,
-      text: text || undefined,
-    }),
+    tls: {
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2',
+    },
+    logger: true,
+    debug: true,
   });
+};
 
-  const data = await response.json();
-  if (!response.ok) {
-    console.error('[Resend HTTPS API Error]:', data);
-    throw new Error(`Resend delivery failed: ${data.message || response.statusText}`);
+const getTransporter = () => {
+  if (!cachedTransporter) {
+    cachedTransporter = createTransporter();
   }
-
-  return { id: data.id };
+  return cachedTransporter;
 };
 
 /**
- * Dispatches an email invitation to a Recruiter / HR using Resend HTTPS API.
+ * Dispatches an email invitation to a Recruiter / HR using Nodemailer SMTP.
  *
  * @param {Object} options
  * @param {string} [options.to] - Recruiter's email address
@@ -92,7 +58,7 @@ const sendEmailViaResend = async ({ to, subject, html, text }) => {
  * @param {string} [options.companyName] - Name of the inviting company
  * @param {string} [options.token] - Signed invitation JWT
  * @param {string} [options.inviteLink] - Complete registration link
- * @throws {Error} If credentials are missing or Resend API call fails
+ * @throws {Error} If credentials are missing or SMTP delivery fails
  */
 const sendRecruiterInviteEmail = async ({
   to,
@@ -106,7 +72,7 @@ const sendRecruiterInviteEmail = async ({
     throw new Error('Recipient email address is required to send recruiter invitation.');
   }
 
-  // Ensure direct setup link is completely clean, valid, and unbroken
+  // Ensure direct setup link is completely clean, unbroken, and points to the frontend /recruiter-setup route
   let directLink = '';
   if (inviteLink && typeof inviteLink === 'string' && inviteLink.trim() !== '') {
     // Strip accidental quotes, spaces, tabs, or newlines
@@ -139,7 +105,7 @@ const sendRecruiterInviteEmail = async ({
         The College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications.
       </p>
 
-      <!-- Primary Setup Button -->
+      <!-- Primary Setup Anchor Button (Mobile safe with inline styling) -->
       <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 32px auto; width: 100%; max-width: 320px;">
         <tr>
           <td align="center" style="border-radius: 8px; background-color: #2563eb;">
@@ -153,7 +119,7 @@ const sendRecruiterInviteEmail = async ({
       <!-- Fallback Anchor Link (Prevents email clients from line-wrapping raw URL strings) -->
       <div style="text-align: center; margin: 24px 0;">
         <p style="color: #64748b; font-size: 13px; margin: 0 0 8px 0;">
-          If the button above does not open, click the link below:
+          If the button above does not open, tap the link below:
         </p>
         <a href="${directLink}" target="_blank" rel="noopener noreferrer" style="word-break: break-all; white-space: normal; color: #2563eb; font-size: 15px; font-weight: 600; text-decoration: underline; display: inline-block;">
           Click Here to Setup Account
@@ -167,22 +133,25 @@ const sendRecruiterInviteEmail = async ({
     </div>
   `;
 
-  const plainText = `Dear Recruitment Team at ${companyName},\n\nThe College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications.\n\nPlease open this invitation in your email app and click "Complete Recruiter Setup" or "Click Here to Setup Account" to finish onboarding.\n\nThis invitation link is unique to ${recipient} and will expire in 48 hours.`;
+  const plainText = `Dear Recruitment Team at ${companyName},\n\nThe College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications.\n\nPlease open this invitation in your email app and click "Complete Recruiter Setup" or "Click Here to Setup Account" to finish onboarding.\n\nDirect Link: ${directLink}\n\nThis invitation link is unique to ${recipient} and will expire in 48 hours.`;
+
+  const mailOptions = {
+    from: `"Campus Placement Cell" <${process.env.EMAIL_USER}>`,
+    to: recipient,
+    subject: 'Invitation to Onboard: Campus Placement Drive',
+    html: htmlContent,
+    text: plainText,
+  };
 
   try {
-    const result = await sendEmailViaResend({
-      to: recipient,
-      subject: 'Invitation to Onboard: Campus Placement Drive',
-      html: htmlContent,
-      text: plainText,
-    });
-
+    const transporter = getTransporter();
+    const info = await transporter.sendMail(mailOptions);
     console.log(
-      `[Email Service] Invitation email successfully sent to ${recipient} via Resend (ID: ${result.id})`
+      `[Email Service] Invitation email successfully sent to ${recipient} via Nodemailer (Message ID: ${info.messageId})`
     );
-    return { success: true, messageId: result.id };
+    return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error(`[Email Service] Resend dispatch failure for ${recipient}:`, error.message);
+    console.error(`[Email Service] Nodemailer delivery failed for ${recipient}:`, error.message);
     throw error;
   }
 };
@@ -239,7 +208,7 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
       </p>
     `;
 
-    plainText = `Hi ${studentName},\n\nCongratulations! You have received an official offer from ${companyName}. Log in to your dashboard to see full details and next steps:\n<${dashboardLink}>`;
+    plainText = `Hi ${studentName},\n\nCongratulations! You have received an official offer from ${companyName}. Log in to your dashboard to see full details and next steps:\n${dashboardLink}`;
   } else if (stageNormalized === 'rejected') {
     subject = `Update on your application to ${companyName}`;
     badgeText = 'Application Status Update';
@@ -262,7 +231,7 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
       </p>
     `;
 
-    plainText = `Hi ${studentName},\n\nThank you for participating in the recruitment process with ${companyName}. While your application will not be advancing to the next round for this role, we encourage you to keep striving and check your dashboard for new upcoming placement drives:\n<${dashboardLink}>`;
+    plainText = `Hi ${studentName},\n\nThank you for participating in the recruitment process with ${companyName}. While your application will not be advancing to the next round for this role, we encourage you to keep striving and check your dashboard for new upcoming placement drives:\n${dashboardLink}`;
   } else {
     subject = `Update on your application to ${companyName}`;
     badgeText = `Round: ${stageCapitalized}`;
@@ -282,7 +251,7 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
       </p>
     `;
 
-    plainText = `Hi ${studentName},\n\nYour application to ${companyName} has moved to the ${stageCapitalized} round. Log in to your dashboard to see full details:\n<${dashboardLink}>`;
+    plainText = `Hi ${studentName},\n\nYour application to ${companyName} has moved to the ${stageCapitalized} round. Log in to your dashboard to see full details:\n${dashboardLink}`;
   }
 
   const htmlContent = `
@@ -316,7 +285,7 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
       <!-- Text Link Fallback -->
       <div style="text-align: center; margin: 20px 0;">
         <p style="color: #64748b; font-size: 12px; margin: 0 0 6px 0;">
-          If the button above does not work, click the link below:
+          If the button above does not work, tap the link below:
         </p>
         <a href="${dashboardLink}" target="_blank" rel="noopener noreferrer" style="word-break: break-all; white-space: normal; color: #2563eb; font-size: 14px; font-weight: 600; text-decoration: underline; display: inline-block;">
           Click Here to Open Placement Dashboard
@@ -330,21 +299,24 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
     </div>
   `;
 
-  try {
-    const result = await sendEmailViaResend({
-      to: studentEmail,
-      subject,
-      text: plainText,
-      html: htmlContent,
-    });
+  const mailOptions = {
+    from: `"Campus Placement Cell" <${process.env.EMAIL_USER}>`,
+    to: studentEmail,
+    subject,
+    text: plainText,
+    html: htmlContent,
+  };
 
+  try {
+    const transporter = getTransporter();
+    const info = await transporter.sendMail(mailOptions);
     console.log(
-      `[Email Service] Stage update email successfully sent to ${studentEmail} for ${companyName} (${newStage}) via Resend (ID: ${result.id})`
+      `[Email Service] Stage update email successfully sent to ${studentEmail} for ${companyName} (${newStage}) via Nodemailer (Message ID: ${info.messageId})`
     );
-    return { success: true, messageId: result.id };
+    return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error(
-      `[Email Service] Resend failure while sending stage update to ${studentEmail}:`,
+      `[Email Service] Nodemailer failure while sending stage update to ${studentEmail}:`,
       error.message
     );
     throw error;
