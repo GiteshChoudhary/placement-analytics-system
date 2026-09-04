@@ -1,15 +1,15 @@
 import axios from 'axios';
 
 // Dynamically resolve base API URL:
-// 1. If explicit VITE_API_URL is provided, use it.
-// 2. Otherwise default to relative path '/api' so requests automatically use
-//    the current browser domain (localhost, LAN IP, or Localtunnel) and Vite proxies to :5000.
+// 1. If VITE_API_URL is defined, use it as the base URL.
+// 2. If VITE_API_URL is not set (local development), fall back to http://localhost:5000/api.
 const getBaseURL = () => {
-  if (import.meta.env.VITE_API_URL) {
-    const raw = import.meta.env.VITE_API_URL;
-    return raw.endsWith('/api') ? raw : `${raw}/api`;
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.trim() !== '') {
+    const cleanUrl = envUrl.trim().replace(/\/+$/, '');
+    return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
   }
-  return '/api';
+  return 'http://localhost:5000/api';
 };
 
 // Create configured axios instance pointing to Express backend

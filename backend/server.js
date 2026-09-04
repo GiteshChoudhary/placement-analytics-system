@@ -19,13 +19,58 @@ const server = http.createServer(app);
 // Used to route real-time notifications to specific connected students
 const userSocketMap = {};
 
+// Allowed Origins for CORS:
+// Supports localhost ports (5173, 3000, etc.), any custom FRONTEND_URL / CLIENT_URL env var,
+// and all deployed Vercel frontend domains (*.vercel.app)
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  'http://localhost:5000',
+  process.env.FRONTEND_URL,
+  process.env.CLIENT_URL,
+].filter(Boolean).map((url) => url.replace(/\/+$/, ''));
+
+const corsOriginValidator = (origin, callback) => {
+  // Allow requests with no origin (e.g. mobile apps, curl, Postman, server-to-server)
+  if (!origin) return callback(null, true);
+
+  const cleanOrigin = origin.replace(/\/+$/, '');
+
+  // 1. Allow all localhost origins (e.g. localhost:5173, 127.0.0.1:3000)
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/.test(origin)) {
+    return callback(null, true);
+  }
+
+  // 2. Allow all Vercel deployment URLs (production & preview branches: *.vercel.app)
+  if (/^https:\/\/[a-zA-Z0-9-_.]+\.vercel\.app$/.test(origin)) {
+    return callback(null, true);
+  }
+
+  // 3. Allow explicitly configured frontend URLs (e.g. FRONTEND_URL in .env)
+  if (allowedOrigins.includes(cleanOrigin)) {
+    return callback(null, true);
+  }
+
+  // 4. In development mode, allow all origins as fallback
+  if (process.env.NODE_ENV !== 'production') {
+    return callback(null, true);
+  }
+
+  return callback(new Error(`CORS policy blocked access from origin: ${origin}`), false);
+};
+
+const corsOptions = {
+  origin: corsOriginValidator,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'Bypass-Tunnel-Reminder'],
+};
+
 // Initialize Socket.io on top of the raw HTTP server
 const io = new Server(server, {
-  cors: {
-    origin: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true,
-  },
+  cors: corsOptions,
 });
 
 // Socket.io Connection & Event Handling
@@ -58,7 +103,7 @@ app.set('io', io);
 app.set('userSocketMap', userSocketMap);
 
 // Core Middlewares
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Incoming HTTP request logger
