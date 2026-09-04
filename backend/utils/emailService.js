@@ -1,38 +1,88 @@
-const dns = require('dns');
-const nodemailer = require('nodemailer');
-
-// Force Node.js to resolve IPv4 addresses before IPv6 to resolve ENETUNREACH on Render
-dns.setDefaultResultOrder('ipv4first');
+let Resend;
+try {
+  Resend = require('resend').Resend;
+} catch (_) {
+  // Fallback to fetch if resend package is not present
+}
 
 /**
- * Helper to construct a configured Nodemailer Gmail transporter.
+ * Core email dispatcher using Resend API (HTTPS / Port 443).
+ * Replaces Nodemailer SMTP to prevent Render firewall connection timeouts (ports 25, 465, 587).
+ *
+ * @param {Object} options
+ * @param {string|string[]} options.to - Recipient email address(es)
+ * @param {string} options.subject - Email subject
+ * @param {string} options.html - HTML email content
+ * @param {string} [options.text] - Plain text fallback
+ * @returns {Promise<{id: string}>} Result object with message ID
  */
-const createTransporter = () => {
-  const emailUser = process.env.EMAIL_USER;
-  const emailPass = process.env.EMAIL_PASS;
-
-  if (!emailUser || !emailPass) {
+const sendEmailViaResend = async ({ to, subject, html, text }) => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
     throw new Error(
-      'Missing Gmail SMTP credentials: EMAIL_USER and EMAIL_PASS must be defined in your backend .env file.'
+      'Missing Resend API Key: RESEND_API_KEY must be defined in your backend .env file or Render environment variables. Get your free API key at https://resend.com'
     );
   }
 
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: emailUser,
-      pass: emailPass,
+  // Resend requires a verified domain or 'onboarding@resend.dev' for free testing
+  const fromAddress =
+    process.env.RESEND_FROM || 'Placement Cell <onboarding@resend.dev>';
+
+  const recipients = Array.isArray(to) ? to : [to];
+
+  // 1. Try official Resend SDK if available
+  if (Resend) {
+    try {
+      const resendClient = new Resend(apiKey);
+      const { data, error } = await resendClient.emails.send({
+        from: fromAddress,
+        to: recipients,
+        subject,
+        html,
+        text: text || undefined,
+      });
+
+      if (error) {
+        console.error('[Resend SDK Error]:', error);
+        throw new Error(`Resend delivery failed: ${error.message || JSON.stringify(error)}`);
+      }
+
+      return { id: data?.id || 'resend_ok' };
+    } catch (err) {
+      if (err.message && err.message.startsWith('Resend delivery failed')) {
+        throw err;
+      }
+      console.warn('[Email Service] Resend SDK failed, trying HTTPS fetch fallback:', err.message);
+    }
+  }
+
+  // 2. Direct HTTPS fetch fallback (zero-dependency, Node 18+)
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
     },
-    tls: {
-      rejectUnauthorized: false,
-    },
+    body: JSON.stringify({
+      from: fromAddress,
+      to: recipients,
+      subject,
+      html,
+      text: text || undefined,
+    }),
   });
+
+  const data = await response.json();
+  if (!response.ok) {
+    console.error('[Resend HTTPS API Error]:', data);
+    throw new Error(`Resend delivery failed: ${data.message || response.statusText}`);
+  }
+
+  return { id: data.id };
 };
 
 /**
- * Dispatches an email invitation to a Recruiter / HR using Gmail SMTP.
+ * Dispatches an email invitation to a Recruiter / HR using Resend HTTPS API.
  *
  * @param {Object} options
  * @param {string} [options.to] - Recruiter's email address
@@ -40,7 +90,7 @@ const createTransporter = () => {
  * @param {string} [options.companyName] - Name of the inviting company
  * @param {string} [options.token] - Signed invitation JWT
  * @param {string} [options.inviteLink] - Complete registration link
- * @throws {Error} If credentials are missing or transporter.sendMail() fails
+ * @throws {Error} If credentials are missing or Resend API call fails
  */
 const sendRecruiterInviteEmail = async ({
   to,
@@ -49,67 +99,65 @@ const sendRecruiterInviteEmail = async ({
   token,
   inviteLink,
 }) => {
-  const transporter = createTransporter();
-
   const recipient = recipientEmail || to;
   if (!recipient) {
     throw new Error('Recipient email address is required to send recruiter invitation.');
   }
 
-  const emailUser = process.env.EMAIL_USER;
-
   // Resolve direct setup link
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
   const setupToken = token || (inviteLink ? inviteLink.split('token=')[1] : '');
-  const directLink = inviteLink || `${clientUrl}/recruiter-setup?token=${setupToken}`;
+  const directLink = inviteLink || `${clientUrl.replace(/\/+$/, '')}/recruiter-setup?token=${setupToken}`;
 
-  // Construct mail payload
-  const mailOptions = {
-    from: `"Placement Cell" <${emailUser}>`,
-    to: recipient,
-    subject: 'Invitation to Onboard: Campus Placement Drive',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff;">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <h1 style="color: #1e3a8a; margin: 0; font-size: 24px;">🎓 Campus Placement Cell</h1>
-          <p style="color: #64748b; margin: 5px 0 0 0; font-size: 14px;">Training & Placement Office (TPO)</p>
-        </div>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-        <h2 style="color: #0f172a; font-size: 18px;">Invitation to Onboard: Campus Placement Drive</h2>
-        <p style="color: #334155; line-height: 1.6;">
-          Dear Recruitment Team${companyName ? ` at <strong>${companyName}</strong>` : ''},
-        </p>
-        <p style="color: #334155; line-height: 1.6;">
-          The College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications.
-        </p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${directLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 15px; display: inline-block;">
-            Complete Recruiter Setup →
-          </a>
-        </div>
-        <p style="color: #64748b; font-size: 13px; margin-top: 25px;">
-          If the button above does not open, copy and paste this link into your browser:
-        </p>
-        <p style="word-break: break-all; font-size: 12px; color: #2563eb;">
-          <a href="${directLink}" style="color: #2563eb;">${directLink}</a>
-        </p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 25px 0;" />
-        <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-          ⚠️ This invitation link is unique to ${recipient} and will expire in <strong>48 hours</strong>.
-        </p>
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="color: #1e3a8a; margin: 0; font-size: 24px;">🎓 Campus Placement Cell</h1>
+        <p style="color: #64748b; margin: 5px 0 0 0; font-size: 14px;">Training & Placement Office (TPO)</p>
       </div>
-    `,
-  };
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+      <h2 style="color: #0f172a; font-size: 18px;">Invitation to Onboard: Campus Placement Drive</h2>
+      <p style="color: #334155; line-height: 1.6;">
+        Dear Recruitment Team${companyName ? ` at <strong>${companyName}</strong>` : ''},
+      </p>
+      <p style="color: #334155; line-height: 1.6;">
+        The College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications.
+      </p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${directLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 15px; display: inline-block;">
+          Complete Recruiter Setup →
+        </a>
+      </div>
+      <p style="color: #64748b; font-size: 13px; margin-top: 25px;">
+        If the button above does not open, copy and paste this link into your browser:
+      </p>
+      <p style="word-break: break-all; font-size: 12px; color: #2563eb;">
+        <a href="${directLink}" style="color: #2563eb;">${directLink}</a>
+      </p>
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 25px 0;" />
+      <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+        ⚠️ This invitation link is unique to ${recipient} and will expire in <strong>48 hours</strong>.
+      </p>
+    </div>
+  `;
+
+  const plainText = `Dear Recruitment Team at ${companyName},\n\nThe College Training & Placement Office cordially invites you to participate in our campus placement season. Please set up your recruiter portal to configure your company's eligibility criteria, package details, and view student applications:\n\n${directLink}\n\nThis invitation link expires in 48 hours.`;
 
   try {
-    const info = await transporter.sendMail(mailOptions);
+    const result = await sendEmailViaResend({
+      to: recipient,
+      subject: 'Invitation to Onboard: Campus Placement Drive',
+      html: htmlContent,
+      text: plainText,
+    });
+
     console.log(
-      `[Email Service] Invitation email successfully sent to ${recipient} (Message ID: ${info.messageId})`
+      `[Email Service] Invitation email successfully sent to ${recipient} via Resend (ID: ${result.id})`
     );
-    return { success: true, messageId: info.messageId };
+    return { success: true, messageId: result.id };
   } catch (error) {
-    console.error(`[Email Service] Gmail SMTP failure for ${recipient}:`, error.message);
-    throw new Error(`Gmail SMTP delivery failed: ${error.message}`);
+    console.error(`[Email Service] Resend dispatch failure for ${recipient}:`, error.message);
+    throw error;
   }
 };
 
@@ -128,10 +176,7 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
     return { success: false, message: 'studentEmail is required' };
   }
 
-  const emailUser = process.env.EMAIL_USER;
-  const transporter = createTransporter();
-
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
   const dashboardLink = `${clientUrl.replace(/\/+$/, '')}/student-dashboard`;
 
   const stageNormalized = (newStage || '').toLowerCase().trim();
@@ -212,58 +257,58 @@ const sendStageUpdateEmail = async (studentEmail, studentName = 'Student', compa
     plainText = `Hi ${studentName},\n\nYour application to ${companyName} has moved to the ${stageCapitalized} round. Log in to your dashboard to see full details: ${dashboardLink}`;
   }
 
-  const mailOptions = {
-    from: `"Placement Cell" <${emailUser}>`,
-    to: studentEmail,
-    subject,
-    text: plainText,
-    html: `
-      <div style="font-family: Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <h1 style="color: #1e3a8a; margin: 0; font-size: 22px; font-weight: 700;">🎓 Campus Placement Cell</h1>
-          <p style="color: #64748b; margin: 4px 0 0 0; font-size: 13px;">Training & Placement Office</p>
-        </div>
-        
-        <div style="margin-bottom: 16px;">
-          <span style="display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: ${badgeColor}; background-color: ${badgeBg}; border: 1px solid ${badgeColor}33;">
-            ${badgeText}
-          </span>
-        </div>
-
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0 20px 0;" />
-
-        ${htmlBody}
-
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${dashboardLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">
-            ${buttonText}
-          </a>
-        </div>
-
-        <p style="color: #64748b; font-size: 12px; margin-top: 25px;">
-          If the button above does not work, copy and paste this URL into your browser:
-        </p>
-        <p style="word-break: break-all; font-size: 12px; color: #2563eb;">
-          <a href="${dashboardLink}" style="color: #2563eb;">${dashboardLink}</a>
-        </p>
-
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 25px 0 15px 0;" />
-        <p style="color: #94a3b8; font-size: 12px; margin: 0; text-align: center;">
-          This is an automated notification from the Campus Placement Analytics & Management System.
-        </p>
+  const htmlContent = `
+    <div style="font-family: Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="color: #1e3a8a; margin: 0; font-size: 22px; font-weight: 700;">🎓 Campus Placement Cell</h1>
+        <p style="color: #64748b; margin: 4px 0 0 0; font-size: 13px;">Training & Placement Office</p>
       </div>
-    `,
-  };
+      
+      <div style="margin-bottom: 16px;">
+        <span style="display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: ${badgeColor}; background-color: ${badgeBg}; border: 1px solid ${badgeColor}33;">
+          ${badgeText}
+        </span>
+      </div>
+
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0 20px 0;" />
+
+      ${htmlBody}
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${dashboardLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">
+          ${buttonText}
+        </a>
+      </div>
+
+      <p style="color: #64748b; font-size: 12px; margin-top: 25px;">
+        If the button above does not work, copy and paste this URL into your browser:
+      </p>
+      <p style="word-break: break-all; font-size: 12px; color: #2563eb;">
+        <a href="${dashboardLink}" style="color: #2563eb;">${dashboardLink}</a>
+      </p>
+
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 25px 0 15px 0;" />
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; text-align: center;">
+        This is an automated notification from the Campus Placement Analytics & Management System.
+      </p>
+    </div>
+  `;
 
   try {
-    const info = await transporter.sendMail(mailOptions);
+    const result = await sendEmailViaResend({
+      to: studentEmail,
+      subject,
+      text: plainText,
+      html: htmlContent,
+    });
+
     console.log(
-      `[Email Service] Stage update email successfully sent to ${studentEmail} for ${companyName} (${newStage}) (Message ID: ${info.messageId})`
+      `[Email Service] Stage update email successfully sent to ${studentEmail} for ${companyName} (${newStage}) via Resend (ID: ${result.id})`
     );
-    return { success: true, messageId: info.messageId };
+    return { success: true, messageId: result.id };
   } catch (error) {
     console.error(
-      `[Email Service] Gmail SMTP failure while sending stage update to ${studentEmail}:`,
+      `[Email Service] Resend failure while sending stage update to ${studentEmail}:`,
       error.message
     );
     throw error;
@@ -274,4 +319,3 @@ module.exports = {
   sendRecruiterInviteEmail,
   sendStageUpdateEmail,
 };
-
